@@ -8,9 +8,10 @@ RUN apt-get update && apt-get install -y \
     libmariadb-dev \
     && docker-php-ext-install mysqli pdo pdo_mysql
 
-# Enable Apache mod_rewrite and fix MPM error
-RUN a2dismod mpm_event mpm_worker || true \
-    && a2enmod mpm_prefork || true \
+# Enable Apache mod_rewrite and forcefully fix MPM error by deleting conflicting modules
+RUN rm -f /etc/apache2/mods-enabled/mpm_event.load \
+          /etc/apache2/mods-enabled/mpm_worker.load \
+    && a2enmod mpm_prefork \
     && a2enmod rewrite
 
 # Set working directory
