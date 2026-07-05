@@ -3,6 +3,9 @@ import joblib
 import pandas as pd
 import json
 
+import warnings
+warnings.filterwarnings('ignore')
+
 try:
     import shap
     SHAP_AVAILABLE = True
