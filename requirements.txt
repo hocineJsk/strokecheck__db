@@ -4,3 +4,4 @@ joblib
 shap
 google-generativeai
 scikit-learn
+groq
