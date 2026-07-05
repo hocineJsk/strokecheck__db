@@ -36,5 +36,8 @@ RUN /var/www/html/venv/bin/pip install --no-cache-dir -r requirements.txt
 # Ensure www-data can execute the python virtual environment
 RUN chown -R www-data:www-data /var/www/html/venv
 
-# Expose port 80
+# Expose port (Optional for Railway, but good practice)
 EXPOSE 80
+
+# Clean up MPMs right before starting Apache to prevent runtime conflicts
+CMD ["/bin/sh", "-c", "rm -f /etc/apache2/mods-enabled/mpm_event.load /etc/apache2/mods-enabled/mpm_worker.load && a2enmod mpm_prefork && apache2-foreground"]
