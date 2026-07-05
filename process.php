@@ -33,7 +33,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     ];
     
     $escaped_args = implode(" ", array_map("escapeshellarg", $feature_array));
-    $python_path = __DIR__ . "/venv/bin/python"; 
+    $python_path = __DIR__ . "/venv/bin/python";
+    if (!file_exists($python_path)) {
+        $python_path = "python3";
+    }
 
     $predict_cmd = "$python_path test.py $escaped_args 2>&1";
     $prediction_json_raw = shell_exec($predict_cmd);
