@@ -7,7 +7,7 @@ from groq import Groq
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 logging.getLogger("absl").setLevel(logging.CRITICAL)
 
-API_KEY = "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"  
+API_KEY = "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"  
 
 client = Groq(api_key=API_KEY)
 
