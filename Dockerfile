@@ -23,6 +23,10 @@ COPY . /var/www/html/
 # Ensure the uploads directory exists and is writable
 RUN mkdir -p /var/www/html/uploads && chown -R www-data:www-data /var/www/html/uploads
 
+# Configure Apache to listen on the dynamic PORT provided by Railway
+RUN echo 'Listen ${PORT}' > /etc/apache2/ports.conf \
+    && sed -i 's/:80/:${PORT}/g' /etc/apache2/sites-available/000-default.conf
+
 # Create a python virtual environment inside the container exactly where the PHP expects it
 RUN python3 -m venv /var/www/html/venv
 
