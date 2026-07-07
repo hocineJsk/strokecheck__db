@@ -16,7 +16,7 @@ $doctor_id = $_SESSION['user_id'];
 $doctor_name = $_SESSION['username'];
 
 $stmt = $conn->prepare(
-    "SELECT id, username, email, created_at FROM users
+    "SELECT id, username, email FROM users
      WHERE Doctor_id = ? AND role = 'Normal_User'
      ORDER BY username ASC"
 );
