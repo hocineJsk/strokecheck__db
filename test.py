@@ -1,74 +1,135 @@
-<?php
+import sys
+import joblib
+import pandas as pd
+import json
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $age = $_POST["age"];
-    $glucose = $_POST["glucose"] * 100;
-    
-    $height = $_POST["height"];
-    $weight = $_POST["weight"];
-    $bmi = round($weight / (($height / 100) ** 2), 2);
+import warnings
+warnings.filterwarnings('ignore')
 
-    $gender = $_POST["gender"];
-    $residence = $_POST["residence"];
-    $hypertension = $_POST["hypertension"];
-    $disease = $_POST["disease"];
-    $married = $_POST["married"];
-    $work = $_POST["work"];
-    $smoking = $_POST["smoking"];
-    
-    $gender_Male          = ($gender == "1") ? 1 : 0;
-    $Residence_type_Urban = ($residence == "1") ? 1 : 0;
-    $wt_never             = ($work == "0") ? 1 : 0;
-    $wt_private           = ($work == "1") ? 1 : 0;
-    $wt_self              = ($work == "2") ? 1 : 0;
-    $wt_children          = ($work == "3") ? 1 : 0;
-    $sm_former            = ($smoking == "1") ? 1 : 0;
-    $sm_never             = ($smoking == "2") ? 1 : 0;
-    $sm_smokes            = ($smoking == "3") ? 1 : 0;
+try:
+    import shap
+    SHAP_AVAILABLE = True
+except ImportError:
+    SHAP_AVAILABLE = False
 
-    $feature_array = [
-        $age, $glucose, $bmi, $gender_Male, $hypertension, $disease, $married, 
-        $wt_never, $wt_private, $wt_self, $wt_children, $Residence_type_Urban, 
-        $sm_former, $sm_never, $sm_smokes
-    ];
-    
-    $escaped_args = implode(" ", array_map("escapeshellarg", $feature_array));
-    $python_path = __DIR__ . "/venv/bin/python";
-    if (!file_exists($python_path)) {
-        $python_path = "python3";
-    }
+import os
+script_dir = os.path.dirname(os.path.abspath(__file__))
+model_path = os.path.join(script_dir, "WEB_stroke_random_forest_model_WEB.joblib")
+scaler_path = os.path.join(script_dir, "WEB_scaler_of_stroke_RF_THIS_IS_CORRECT_VER_WEB.joblib")
 
-    $predict_cmd = "$python_path test.py $escaped_args 2>&1";
-    $prediction_json_raw = shell_exec($predict_cmd);
- 
-    $prediction_data = json_decode($prediction_json_raw, true);
+model = joblib.load(model_path)
+scaler = joblib.load(scaler_path)
 
-    $ai_text = null;
-    $action = $_POST["action"] ?? "predict";
+if len(sys.argv) < 16:
+    print(json.dumps({'error': 'Missing arguments'}))
+    sys.exit(1)
 
-    if ($action === "advice" && $prediction_data && isset($prediction_data['increasing_risk_factors'])) {
-        $features_for_ai = json_encode($prediction_data['increasing_risk_factors']);
-        $escaped_json = escapeshellarg($features_for_ai);
-        
-        $advice_cmd = "$python_path AI_advice.py $escaped_json 2>&1";
-        $ai_text = shell_exec($advice_cmd);
-    } elseif ($action === "advice") {
-        if (!$prediction_data) {
-            $ai_text = "Debug - test.py output was not valid JSON: " . $prediction_json_raw;
-        } else {
-            $ai_text = "Sorry the AI can't generate any advice (No risk factors found).";
-        }
-    }
+try:
+    args = [float(x) for x in sys.argv[1:16]]
+except ValueError as e:
+    print(json.dumps({'error': f'Invalid input: {str(e)}'}))
+    sys.exit(1)
 
-    if ($action === "advice" && !$ai_text) {
-        $ai_text = "Aucune réponse de l'IA conseils.";
-    }
-    
-    $redirect = "index.php?prediction=" . urlencode($prediction_json_raw);
-    if ($ai_text !== null) {
-        $redirect .= "&response=" . urlencode($ai_text);
-    }
-    header("Location: " . $redirect);
-    exit();
+feature_names = [
+    'age',
+    'avg_glucose_level',
+    'bmi',
+    'gender_Male',
+    'hypertension_1',
+    'heart_disease_1',
+    'ever_married_Yes',
+    'work_type_Never_worked',
+    'work_type_Private',
+    'work_type_Self-employed',
+    'work_type_children',
+    'Residence_type_Urban',
+    'smoking_status_formerly smoked',
+    'smoking_status_never smoked',
+    'smoking_status_smokes'
+]
+
+#Noms des features
+feature_display_names = {
+    'age': 'Age',
+    'avg_glucose_level': 'Glucose Level',
+    'bmi': 'BMI',
+    'gender_Male': 'Male Gender',
+    'hypertension_1': 'Hypertension',
+    'heart_disease_1': 'Heart Disease',
+    'ever_married_Yes': 'Married Status',
+    'work_type_Never_worked': 'Never Worked',
+    'work_type_Private': 'Private Sector Work',
+    'work_type_Self-employed': 'Self-employed',
+    'work_type_children': 'Child',
+    'Residence_type_Urban': 'Urban Residence',
+    'smoking_status_formerly smoked': 'Former Smoker',
+    'smoking_status_never smoked': 'Never Smoked',
+    'smoking_status_smokes': 'Current Smoker'
 }
-?>
+
+#Build DataFrame
+df = pd.DataFrame([args], columns=feature_names)
+
+try:
+    pred = model.predict(df)[0]
+    prob = model.predict_proba(df)[0][1]
+except Exception as e:
+    print(json.dumps({'error': f'Prediction error: {str(e)}'}))
+    sys.exit(1)
+
+#SHAP explication
+top_features = []
+
+if SHAP_AVAILABLE:
+    try:
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(df)
+        
+        import numpy as np
+        shap_array = np.array(shap_values)
+        if len(shap_array.shape) == 3:
+            shap_values_class1 = shap_array[0, :, 1]
+        elif isinstance(shap_values, list) and len(shap_values) == 2:
+            shap_values_class1 = shap_values[1][0]
+        else:
+            shap_values_class1 = shap_values[0]
+     
+        feature_impacts = []
+        for i, fname in enumerate(feature_names):
+            try:
+                # Extraire la valeur SHAP pour cette feature
+                shap_val = float(shap_values_class1[i])
+                
+                # Ne garder que les features avec un impact significatif
+                if abs(shap_val) > 0.001:
+                    feature_impacts.append({
+                        'name': feature_display_names.get(fname, fname),
+                        'value': float(args[i]),
+                        'shap_value': shap_val,
+                        'impact': 'increases' if shap_val > 0 else 'decreases'
+                    })
+            except (IndexError, TypeError) as e:
+                continue
+        
+        feature_impacts.sort(key=lambda x: abs(x['shap_value']), reverse=True)
+        
+        top_features = feature_impacts[:5]
+        
+        #Collect ALL features where risk increases, excluding 'age'
+        increasing_risk_factors = [
+            f for f in feature_impacts 
+            if f['shap_value'] > 0 and f['name'] != 'Age'
+        ]
+        
+    except Exception as e:
+        pass
+
+# output pour PHP JSON format
+result = {
+    'probability': float(prob),
+    'prediction': int(pred),
+    'top_features': top_features,
+    'increasing_risk_factors': increasing_risk_factors
+}
+
+print(json.dumps(result))
